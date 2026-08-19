@@ -6,9 +6,13 @@ export default function BarcodeScanner({
   close,
 }) {
   const scannerRef = useRef(null);
+
   const [error, setError] = useState("");
+  const [starting, setStarting] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
     const scanner = new Html5Qrcode(
       "barcode-reader"
     );
@@ -17,36 +21,85 @@ export default function BarcodeScanner({
 
     const startScanner = async () => {
       try {
+        setError("");
+        setStarting(true);
+
+        if (
+          !navigator.mediaDevices ||
+          !navigator.mediaDevices.getUserMedia
+        ) {
+          throw new Error(
+            "Camera API unavailable"
+          );
+        }
+
         await scanner.start(
           {
-            facingMode: "environment",
+            facingMode: {
+              ideal: "environment",
+            },
           },
           {
             fps: 10,
+
             qrbox: {
-              width: 280,
-              height: 160,
+              width: 300,
+              height: 180,
             },
+
+            aspectRatio: 1.777778,
           },
           async (decodedText) => {
-            await scanner.stop();
+            try {
+              if (scanner.isScanning) {
+                await scanner.stop();
+              }
+            } catch {
+              // Scanner may already be stopped.
+            }
 
             onProductFound(decodedText);
           },
-          () => {}
+          () => {
+            // Ignore frames where no barcode is found.
+          }
         );
-      } catch (err) {
-        console.error(err);
 
-        setError(
-          "Kamera konnte nicht gestartet werden. Bitte erlaube den Kamerazugriff."
+        if (mounted) {
+          setStarting(false);
+        }
+      } catch (err) {
+        console.error(
+          "Barcode scanner error:",
+          err
         );
+
+        if (!mounted) return;
+
+        setStarting(false);
+
+        if (
+          err?.name === "NotAllowedError" ||
+          String(err).includes(
+            "Permission"
+          )
+        ) {
+          setError(
+            "Kamerazugriff wurde blockiert. Erlaube Safari den Zugriff auf deine Kamera."
+          );
+        } else {
+          setError(
+            "Die Kamera konnte nicht gestartet werden. Öffne die App direkt in Safari und versuche es erneut."
+          );
+        }
       }
     };
 
     startScanner();
 
     return () => {
+      mounted = false;
+
       if (
         scannerRef.current &&
         scannerRef.current.isScanning
@@ -78,6 +131,12 @@ export default function BarcodeScanner({
           </button>
         </div>
 
+        {starting && !error && (
+          <p className="barcode-status">
+            Kamera wird gestartet...
+          </p>
+        )}
+
         <div
           id="barcode-reader"
           className="barcode-reader"
@@ -90,9 +149,9 @@ export default function BarcodeScanner({
         )}
 
         <p className="barcode-help">
-          Halte den Barcode vor die Kamera.
-          MAX GAINS sucht anschließend das
-          Produkt.
+          Halte den Barcode ruhig und vollständig
+          in den Rahmen. Gute Beleuchtung hilft
+          bei der Erkennung.
         </p>
       </div>
     </div>
