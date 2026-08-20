@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 import WorkoutTimer from "./components/gym/WorkoutTimer";
 import BarcodeScanner from "./components/food/BarcodeScanner";
 import MealDetails from "./components/MealDetails";
+import { supabase } from "./utils/supabase";
 const defaultData = {
   profile: {
     name: "Athlete",
@@ -62,21 +63,82 @@ const [selectedMeal, setSelectedMeal] =
 
   const [foodMeal, setFoodMeal] = useState("Breakfast");
 
-  const updateData = (changes) => {
-    setData((current) => {
-      const updated = {
-        ...current,
-        ...changes,
+ const updateData = (changes) => {
+  setData((current) => {
+    const updated = {
+      ...current,
+      ...changes,
+    };
+
+    // Lokal sofort speichern
+    localStorage.setItem(
+      "max-gains",
+      JSON.stringify(updated)
+    );
+
+    // Zusätzlich in Supabase speichern
+    supabase
+      .from("app_data")
+      .upsert(
+        {
+          user_id: "main-user",
+          data: updated,
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: "user_id",
+        }
+      )
+      .then(({ error }) => {
+        if (error) {
+          console.error(
+            "Supabase save error:",
+            error
+          );
+        }
+      });
+
+    return updated;
+  });
+};
+useEffect(() => {
+  const loadCloudData = async () => {
+    const { data: row, error } =
+      await supabase
+        .from("app_data")
+        .select("data")
+        .eq("user_id", "main-user")
+        .single();
+
+    if (error) {
+      console.error(
+        "Supabase load error:",
+        error
+      );
+      return;
+    }
+
+    if (row?.data) {
+      const cloudData = {
+        ...defaultData,
+        ...row.data,
+        profile: {
+          ...defaultData.profile,
+          ...(row.data.profile || {}),
+        },
       };
+
+      setData(cloudData);
 
       localStorage.setItem(
         "max-gains",
-        JSON.stringify(updated)
+        JSON.stringify(cloudData)
       );
-
-      return updated;
-    });
+    }
   };
+
+  loadCloudData();
+}, []);
 
   const today = new Date().toDateString();
 
