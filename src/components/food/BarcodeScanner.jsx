@@ -6,67 +6,108 @@ export default function BarcodeScanner({
   close,
 }) {
   const scannerRef = useRef(null);
+  const stoppedRef = useRef(false);
 
   const [error, setError] = useState("");
-  const [starting, setStarting] = useState(true);
+  const [status, setStatus] = useState(
+    "Kamera wird gestartet..."
+  );
 
   useEffect(() => {
     let mounted = true;
 
-    const scanner = new Html5Qrcode(
-      "barcode-reader"
-    );
-
-    scannerRef.current = scanner;
-
     const startScanner = async () => {
       try {
         setError("");
-        setStarting(true);
+        setStatus("Kamera wird gestartet...");
 
         if (
           !navigator.mediaDevices ||
           !navigator.mediaDevices.getUserMedia
         ) {
-          throw new Error(
-            "Camera API unavailable"
-          );
+          throw new Error("CAMERA_NOT_SUPPORTED");
         }
 
+        const cameras =
+          await Html5Qrcode.getCameras();
+
+        if (!mounted) return;
+
+        if (!cameras || cameras.length === 0) {
+          throw new Error("NO_CAMERA");
+        }
+
+        // Auf iPhones sind die Labels nach erteilter
+        // Berechtigung normalerweise verfügbar.
+        const backCamera =
+          cameras.find((camera) => {
+            const label =
+              camera.label.toLowerCase();
+
+            return (
+              label.includes("back") ||
+              label.includes("rear") ||
+              label.includes("environment") ||
+              label.includes("rück")
+            );
+          }) ||
+          cameras[cameras.length - 1];
+
+        const scanner = new Html5Qrcode(
+          "barcode-reader",
+          false
+        );
+
+        scannerRef.current = scanner;
+        stoppedRef.current = false;
+
         await scanner.start(
-          {
-            facingMode: {
-              ideal: "environment",
-            },
-          },
+          backCamera.id,
           {
             fps: 10,
 
             qrbox: {
-              width: 300,
-              height: 180,
+              width: 260,
+              height: 150,
             },
 
             aspectRatio: 1.777778,
+
+            disableFlip: false,
           },
+
           async (decodedText) => {
+            if (stoppedRef.current) return;
+
+            stoppedRef.current = true;
+
             try {
               if (scanner.isScanning) {
                 await scanner.stop();
               }
-            } catch {
-              // Scanner may already be stopped.
+            } catch (stopError) {
+              console.log(
+                "Scanner already stopped:",
+                stopError
+              );
             }
 
-            onProductFound(decodedText);
+            if (mounted) {
+              setStatus("Produkt erkannt.");
+              onProductFound(decodedText);
+            }
           },
+
           () => {
-            // Ignore frames where no barcode is found.
+            // Kein Barcode in diesem Frame.
+            // Bewusst ignorieren.
           }
         );
 
         if (mounted) {
-          setStarting(false);
+          setStatus(
+            "Barcode in den Rahmen halten."
+          );
         }
       } catch (err) {
         console.error(
@@ -76,40 +117,86 @@ export default function BarcodeScanner({
 
         if (!mounted) return;
 
-        setStarting(false);
+        const message =
+          String(
+            err?.message ||
+              err ||
+              ""
+          ).toLowerCase();
 
         if (
           err?.name === "NotAllowedError" ||
-          String(err).includes(
-            "Permission"
+          message.includes("permission") ||
+          message.includes("notallowed")
+        ) {
+          setError(
+            "Kamerazugriff wurde blockiert. Erlaube Safari den Kamerazugriff und lade die Seite neu."
+          );
+        } else if (
+          message.includes("no_camera")
+        ) {
+          setError(
+            "Auf diesem Gerät wurde keine Kamera gefunden."
+          );
+        } else if (
+          message.includes(
+            "camera_not_supported"
           )
         ) {
           setError(
-            "Kamerazugriff wurde blockiert. Erlaube Safari den Zugriff auf deine Kamera."
+            "Der Browser unterstützt keinen Kamerazugriff."
           );
         } else {
           setError(
-            "Die Kamera konnte nicht gestartet werden. Öffne die App direkt in Safari und versuche es erneut."
+            `Scanner konnte nicht gestartet werden: ${
+              err?.message || String(err)
+            }`
           );
         }
+
+        setStatus("");
       }
     };
 
-    startScanner();
+    // Kleiner Delay, damit das DOM-Element
+    // #barcode-reader sicher gerendert ist.
+    const timer = setTimeout(
+      startScanner,
+      150
+    );
 
     return () => {
       mounted = false;
+      clearTimeout(timer);
 
-      if (
-        scannerRef.current &&
-        scannerRef.current.isScanning
-      ) {
-        scannerRef.current
+      const scanner =
+        scannerRef.current;
+
+      if (scanner?.isScanning) {
+        scanner
           .stop()
           .catch(() => {});
       }
     };
   }, [onProductFound]);
+
+  const handleClose = async () => {
+    const scanner =
+      scannerRef.current;
+
+    try {
+      if (scanner?.isScanning) {
+        await scanner.stop();
+      }
+    } catch (err) {
+      console.log(
+        "Scanner stop error:",
+        err
+      );
+    }
+
+    close();
+  };
 
   return (
     <div className="modal-backdrop">
@@ -125,15 +212,15 @@ export default function BarcodeScanner({
 
           <button
             className="close-button"
-            onClick={close}
+            onClick={handleClose}
           >
             ×
           </button>
         </div>
 
-        {starting && !error && (
+        {status && !error && (
           <p className="barcode-status">
-            Kamera wird gestartet...
+            {status}
           </p>
         )}
 
@@ -150,8 +237,7 @@ export default function BarcodeScanner({
 
         <p className="barcode-help">
           Halte den Barcode ruhig und vollständig
-          in den Rahmen. Gute Beleuchtung hilft
-          bei der Erkennung.
+          in den Rahmen.
         </p>
       </div>
     </div>
