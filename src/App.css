@@ -3060,3 +3060,79 @@ body,
 .water-open-recovery {
   margin-top: 40px !important;
 }
+@media (max-width: 700px) {
+  .page h1 {
+    font-size: 34px !important;
+    line-height: 1.05 !important;
+    letter-spacing: -1.5px !important;
+  }
+
+  .page h2 {
+    line-height: 1.15 !important;
+  }
+
+  .navigation button {
+    font-size: 10px !important;
+    white-space: nowrap;
+  }
+}
+input,
+textarea,
+select {
+  font-size: 16px !important;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+input {
+  field-sizing: fixed;
+}
+.barcode-reader {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.barcode-reader video {
+  width: 100% !important;
+  height: auto !important;
+  object-fit: cover;
+  border-radius: 12px;
+}
+.barcode-reader {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #080a0e;
+}
+
+.barcode-reader video {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.barcode-status {
+  margin: 8px 0 12px;
+  color: #8b919d;
+  font-size: 12px;
+}
+
+.barcode-error {
+  margin-top: 12px;
+  padding: 12px;
+  color: #ff6847;
+  background: rgba(255, 104, 71, 0.08);
+  border: 1px solid rgba(255, 104, 71, 0.25);
+  border-radius: 10px;
+}
+input,
+textarea,
+select {
+  font-size: 16px !important;
+}
