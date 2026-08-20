@@ -108,7 +108,7 @@ useEffect(() => {
         .from("app_data")
         .select("data")
         .eq("user_id", "main-user")
-        .single();
+        .maybeSingle();
 
     if (error) {
       console.error(
@@ -217,8 +217,11 @@ useEffect(() => {
   />
 )}
         {page === "progress" && (
-          <Progress data={data} />
-        )}
+  <Progress
+    data={data}
+    updateData={updateData}
+  />
+)}
 
         {page === "settings" && (
           <Settings
@@ -915,37 +918,123 @@ function NewWorkout({
    ROUTINE EDITOR
 ========================= */
 
+const EXERCISE_LIBRARY = [
+  // BRUST
+  { id: "bench-press", name: "Bankdrücken", muscle: "Brust", equipment: "Langhantel" },
+  { id: "incline-bench", name: "Schrägbankdrücken", muscle: "Brust", equipment: "Langhantel" },
+  { id: "dumbbell-bench", name: "Kurzhantel Bankdrücken", muscle: "Brust", equipment: "Kurzhantel" },
+  { id: "incline-dumbbell", name: "Schrägbank Kurzhanteldrücken", muscle: "Brust", equipment: "Kurzhantel" },
+  { id: "chest-press", name: "Brustpresse", muscle: "Brust", equipment: "Maschine" },
+  { id: "incline-chest-press", name: "Schräge Brustpresse", muscle: "Brust", equipment: "Maschine" },
+  { id: "pec-deck", name: "Butterfly", muscle: "Brust", equipment: "Maschine" },
+  { id: "cable-fly", name: "Cable Fly", muscle: "Brust", equipment: "Kabel" },
+  { id: "dips", name: "Dips", muscle: "Brust", equipment: "Körpergewicht" },
+
+  // RÜCKEN
+  { id: "lat-pulldown", name: "Latzug", muscle: "Rücken", equipment: "Kabel" },
+  { id: "pull-up", name: "Klimmzüge", muscle: "Rücken", equipment: "Körpergewicht" },
+  { id: "barbell-row", name: "Langhantelrudern", muscle: "Rücken", equipment: "Langhantel" },
+  { id: "dumbbell-row", name: "Kurzhantelrudern", muscle: "Rücken", equipment: "Kurzhantel" },
+  { id: "seated-row", name: "Sitzendes Kabelrudern", muscle: "Rücken", equipment: "Kabel" },
+  { id: "machine-row", name: "Rudermaschine", muscle: "Rücken", equipment: "Maschine" },
+  { id: "tbar-row", name: "T-Bar Row", muscle: "Rücken", equipment: "Maschine" },
+  { id: "pullover", name: "Kabel Pullover", muscle: "Rücken", equipment: "Kabel" },
+
+  // SCHULTERN
+  { id: "shoulder-press", name: "Schulterdrücken", muscle: "Schultern", equipment: "Kurzhantel" },
+  { id: "machine-shoulder", name: "Schulterpresse", muscle: "Schultern", equipment: "Maschine" },
+  { id: "lateral-raise", name: "Seitheben", muscle: "Schultern", equipment: "Kurzhantel" },
+  { id: "cable-lateral", name: "Kabel Seitheben", muscle: "Schultern", equipment: "Kabel" },
+  { id: "rear-delt", name: "Reverse Butterfly", muscle: "Schultern", equipment: "Maschine" },
+  { id: "face-pull", name: "Face Pulls", muscle: "Schultern", equipment: "Kabel" },
+
+  // BIZEPS
+  { id: "barbell-curl", name: "Langhantel Curls", muscle: "Bizeps", equipment: "Langhantel" },
+  { id: "dumbbell-curl", name: "Kurzhantel Curls", muscle: "Bizeps", equipment: "Kurzhantel" },
+  { id: "hammer-curl", name: "Hammer Curls", muscle: "Bizeps", equipment: "Kurzhantel" },
+  { id: "preacher-curl", name: "Preacher Curls", muscle: "Bizeps", equipment: "Maschine" },
+  { id: "cable-curl", name: "Cable Curls", muscle: "Bizeps", equipment: "Kabel" },
+
+  // TRIZEPS
+  { id: "pushdown", name: "Trizeps Pushdown", muscle: "Trizeps", equipment: "Kabel" },
+  { id: "overhead-extension", name: "Overhead Trizeps Extension", muscle: "Trizeps", equipment: "Kabel" },
+  { id: "skullcrusher", name: "Skull Crushers", muscle: "Trizeps", equipment: "Langhantel" },
+  { id: "close-grip-bench", name: "Enges Bankdrücken", muscle: "Trizeps", equipment: "Langhantel" },
+
+  // BEINE
+  { id: "squat", name: "Kniebeugen", muscle: "Beine", equipment: "Langhantel" },
+  { id: "leg-press", name: "Beinpresse", muscle: "Beine", equipment: "Maschine" },
+  { id: "leg-extension", name: "Beinstrecker", muscle: "Beine", equipment: "Maschine" },
+  { id: "leg-curl", name: "Beinbeuger", muscle: "Beine", equipment: "Maschine" },
+  { id: "rdl", name: "Romanian Deadlift", muscle: "Beine", equipment: "Langhantel" },
+  { id: "hack-squat", name: "Hack Squat", muscle: "Beine", equipment: "Maschine" },
+  { id: "calf-raise", name: "Wadenheben", muscle: "Waden", equipment: "Maschine" },
+
+  // BAUCH
+  { id: "cable-crunch", name: "Cable Crunch", muscle: "Bauch", equipment: "Kabel" },
+  { id: "leg-raise", name: "Leg Raises", muscle: "Bauch", equipment: "Körpergewicht" },
+  { id: "crunch", name: "Crunches", muscle: "Bauch", equipment: "Körpergewicht" },
+];
+
 function RoutineEditor({
   data,
   updateData,
   routine,
   close,
 }) {
-  const [name, setName] = useState(
-    routine.name
-  );
+  const [name, setName] = useState(routine.name);
 
-  const [exerciseName, setExerciseName] =
-    useState("");
+  const [search, setSearch] = useState("");
+  const [muscleFilter, setMuscleFilter] = useState("Alle");
 
-  const [sets, setSets] = useState(3);
-
-  const [reps, setReps] = useState(8);
-
-  const [weight, setWeight] = useState(0);
+const [sets, setSets] = useState(3);
+const [weight, setWeight] = useState(0);
 
   const exercises = routine.exercises;
 
+  const muscleGroups = [
+    "Alle",
+    "Brust",
+    "Rücken",
+    "Schultern",
+    "Bizeps",
+    "Trizeps",
+    "Beine",
+    "Waden",
+    "Bauch",
+  ];
+
+  const filteredExercises = EXERCISE_LIBRARY.filter(
+    (exercise) => {
+      const matchesSearch =
+        exercise.name
+          .toLowerCase()
+          .includes(search.toLowerCase()) ||
+        exercise.muscle
+          .toLowerCase()
+          .includes(search.toLowerCase()) ||
+        exercise.equipment
+          .toLowerCase()
+          .includes(search.toLowerCase());
+
+      const matchesMuscle =
+        muscleFilter === "Alle" ||
+        exercise.muscle === muscleFilter;
+
+      return matchesSearch && matchesMuscle;
+    }
+  );
+
   const saveRoutine = () => {
-    const updatedRoutines =
-      data.routines.map((item) =>
+    const updatedRoutines = data.routines.map(
+      (item) =>
         item.id === routine.id
           ? {
               ...item,
               name,
             }
           : item
-      );
+    );
 
     updateData({
       routines: updatedRoutines,
@@ -954,19 +1043,29 @@ function RoutineEditor({
     close();
   };
 
-  const addExercise = () => {
-    if (!exerciseName.trim()) return;
+  const addExerciseFromLibrary = (exercise) => {
+    const alreadyExists = exercises.some(
+      (item) => item.libraryId === exercise.id
+    );
+
+    if (alreadyExists) {
+      return;
+    }
 
     const newExercise = {
-      id: Date.now(),
-      name: exerciseName,
-      sets: Number(sets),
-      reps: Number(reps),
-      weight: Number(weight),
-    };
+  id: Date.now(),
+  libraryId: exercise.id,
+  name: exercise.name,
+  muscle: exercise.muscle,
+  equipment: exercise.equipment,
 
-    const updatedRoutines =
-      data.routines.map((item) =>
+  sets: Number(sets),
+  reps: 0,
+  weight: Number(weight),
+};
+
+    const updatedRoutines = data.routines.map(
+      (item) =>
         item.id === routine.id
           ? {
               ...item,
@@ -977,23 +1076,20 @@ function RoutineEditor({
               ],
             }
           : item
-      );
+    );
 
     updateData({
       routines: updatedRoutines,
     });
 
-    setExerciseName("");
-    setSets(3);
-    setReps(8);
-    setWeight(0);
-
+    // Damit dein aktuell geöffnetes routine-Objekt
+    // die Übung direkt ebenfalls anzeigt.
     routine.exercises.push(newExercise);
   };
 
   const deleteExercise = (exerciseId) => {
-    const updatedRoutines =
-      data.routines.map((item) =>
+    const updatedRoutines = data.routines.map(
+      (item) =>
         item.id === routine.id
           ? {
               ...item,
@@ -1004,16 +1100,25 @@ function RoutineEditor({
                 ),
             }
           : item
-      );
+    );
 
     updateData({
       routines: updatedRoutines,
     });
+
+    const index = routine.exercises.findIndex(
+      (exercise) => exercise.id === exerciseId
+    );
+
+    if (index !== -1) {
+      routine.exercises.splice(index, 1);
+    }
   };
 
   return (
     <div className="modal-backdrop">
-      <div className="modal">
+      <div className="modal routine-editor-modal">
+
         <div className="modal-header">
           <div>
             <p className="eyebrow">
@@ -1044,100 +1149,168 @@ function RoutineEditor({
 
         <h3>Exercises</h3>
 
-        {exercises.map((exercise) => (
-          <div
-            className="exercise-preview"
-            key={exercise.id}
-          >
-            <div>
-              <strong>
-                {exercise.name}
-              </strong>
-
-              <small>
-                {exercise.sets} sets ×{" "}
-                {exercise.reps} reps
-                {" • "}
-                {exercise.weight} kg
-              </small>
+        <div className="routine-exercise-list">
+          {exercises.length === 0 && (
+            <div className="routine-empty">
+              Noch keine Übungen hinzugefügt.
             </div>
+          )}
 
-            <button
-              className="delete-button"
-              onClick={() =>
-                deleteExercise(
-                  exercise.id
-                )
-              }
+          {exercises.map((exercise) => (
+            <div
+              className="exercise-preview"
+              key={exercise.id}
             >
-              ×
-            </button>
-          </div>
-        ))}
+              <div>
+                <strong>
+                  {exercise.name}
+                </strong>
 
-        <div className="add-exercise">
+                <small>
+                  {exercise.muscle
+                    ? `${exercise.muscle} • `
+                    : ""}
+                  {exercise.equipment || ""}
+                </small>
+
+                <small>
+                  {exercise.weight} kg •{" "}
+                  {exercise.reps} reps
+                </small>
+              </div>
+
+              <button
+                className="delete-button"
+                onClick={() =>
+                  deleteExercise(
+                    exercise.id
+                  )
+                }
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="exercise-picker">
+
           <p className="eyebrow">
             ADD EXERCISE
           </p>
 
-          <label>
-            Exercise name
+          <div className="exercise-search">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
 
             <input
-              value={exerciseName}
+              value={search}
               onChange={(e) =>
-                setExerciseName(
-                  e.target.value
-                )
+                setSearch(e.target.value)
               }
-              placeholder="Bench Press"
+              placeholder="Übung suchen..."
             />
-          </label>
-
-          <div className="form-grid">
-            <label>
-              Sets
-
-              <input
-                type="number"
-                value={sets}
-                onChange={(e) =>
-                  setSets(e.target.value)
-                }
-              />
-            </label>
-
-            <label>
-              Target reps
-
-              <input
-                type="number"
-                value={reps}
-                onChange={(e) =>
-                  setReps(e.target.value)
-                }
-              />
-            </label>
           </div>
 
-          <label>
-            Starting weight
+          <div className="exercise-filters">
+            {muscleGroups.map((muscle) => (
+              <button
+                key={muscle}
+                className={
+                  muscleFilter === muscle
+                    ? "exercise-filter active"
+                    : "exercise-filter"
+                }
+                onClick={() =>
+                  setMuscleFilter(muscle)
+                }
+              >
+                {muscle}
+              </button>
+            ))}
+          </div>
 
-            <input
-              type="number"
-              value={weight}
-              onChange={(e) =>
-                setWeight(e.target.value)
-              }
-            />
-          </label>
+          <div className="exercise-default-values">
+            <label>
+              Starting weight
 
-          <button
-            className="secondary-button full"
-            onClick={addExercise}
-          >
-            + ADD EXERCISE
-          </button>
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                value={weight}
+                onChange={(e) =>
+                  setWeight(e.target.value)
+                }
+              />
+            </label>
+
+           <label>
+  Sets
+
+  <input
+    type="number"
+    min="1"
+    max="10"
+    value={sets}
+    onChange={(e) =>
+      setSets(e.target.value)
+    }
+  />
+</label>
+          </div>
+
+          <div className="exercise-library">
+            {filteredExercises.map((exercise) => {
+              const alreadyAdded = exercises.some(
+                (item) =>
+                  item.libraryId === exercise.id
+              );
+
+              return (
+                <button
+                  className="exercise-library-item"
+                  key={exercise.id}
+                  disabled={alreadyAdded}
+                  onClick={() =>
+                    addExerciseFromLibrary(
+                      exercise
+                    )
+                  }
+                >
+                  <div className="exercise-library-icon">
+                    {exercise.name
+                      .charAt(0)
+                      .toUpperCase()}
+                  </div>
+
+                  <div className="exercise-library-info">
+                    <strong>
+                      {exercise.name}
+                    </strong>
+
+                    <small>
+                      {exercise.muscle} •{" "}
+                      {exercise.equipment}
+                    </small>
+                  </div>
+
+                  <span className="exercise-library-add">
+                    {alreadyAdded ? "✓" : "+"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <button
@@ -2365,57 +2538,397 @@ function EditFood({
     </div>
   );
 }
-function Progress({ data }) {
+function Progress({
+  data,
+  updateData,
+}) {
+  const [range, setRange] =
+    useState("week");
+
+  const [showWeightInput, setShowWeightInput] =
+    useState(false);
+
+  const [weight, setWeight] =
+    useState("");
+
+  const weightHistory =
+    data.profile.weightHistory || [];
+
+  const now = new Date();
+
+  const rangeDays =
+    range === "week"
+      ? 7
+      : range === "month"
+      ? 30
+      : Infinity;
+
+  const filteredWorkouts =
+    data.workouts.filter((workout) => {
+      if (rangeDays === Infinity) {
+        return true;
+      }
+
+      const date =
+        new Date(workout.date);
+
+      const diff =
+        (now - date) /
+        (1000 * 60 * 60 * 24);
+
+      return diff <= rangeDays;
+    });
+
+  const filteredWeights =
+    weightHistory.filter((entry) => {
+      if (rangeDays === Infinity) {
+        return true;
+      }
+
+      const date =
+        new Date(entry.date);
+
+      const diff =
+        (now - date) /
+        (1000 * 60 * 60 * 24);
+
+      return diff <= rangeDays;
+    });
+
+  const addWeight = () => {
+    if (!weight) return;
+
+    const newEntry = {
+      id: Date.now(),
+      date: new Date().toISOString(),
+      weight: Number(weight),
+    };
+
+    updateData({
+      profile: {
+        ...data.profile,
+        weightHistory: [
+          ...weightHistory,
+          newEntry,
+        ],
+      },
+    });
+
+    setWeight("");
+    setShowWeightInput(false);
+  };
+
+  const lastWeight =
+    weightHistory.length > 0
+      ? weightHistory[
+          weightHistory.length - 1
+        ]
+      : null;
+
+  const last7Days = Array.from(
+    { length: 7 },
+    (_, index) => {
+      const date = new Date();
+
+      date.setDate(
+        date.getDate() - (6 - index)
+      );
+
+      return date;
+    }
+  );
+
+  const workoutCounts =
+    last7Days.map((date) => {
+      return data.workouts.filter(
+        (workout) => {
+          const workoutDate =
+            new Date(workout.date);
+
+          return (
+            workoutDate.toDateString() ===
+            date.toDateString()
+          );
+        }
+      ).length;
+    });
+
+  const maxWorkoutCount =
+    Math.max(
+      ...workoutCounts,
+      1
+    );
+
   return (
-    <div className="page">
-      <PageTitle
-        eyebrow="PROGRESS"
-        title="Your history."
-        description="Every saved workout stays here."
-      />
+    <div className="page progress-page">
 
-      {data.workouts.length === 0 ? (
-        <div className="card">
-          <h2>No workouts yet.</h2>
+      <div className="progress-header">
+        <span>PROGRESS</span>
+        <h1>Your progress.</h1>
+        <p>
+          Track your body and training.
+        </p>
+      </div>
 
-          <p className="muted">
-            Your completed sessions will
-            appear here.
-          </p>
+      {/* RANGE */}
+      <div className="progress-tabs">
+        <button
+          className={
+            range === "week"
+              ? "active"
+              : ""
+          }
+          onClick={() =>
+            setRange("week")
+          }
+        >
+          Woche
+        </button>
+
+        <button
+          className={
+            range === "month"
+              ? "active"
+              : ""
+          }
+          onClick={() =>
+            setRange("month")
+          }
+        >
+          Monat
+        </button>
+
+        <button
+          className={
+            range === "all"
+              ? "active"
+              : ""
+          }
+          onClick={() =>
+            setRange("all")
+          }
+        >
+          Alle
+        </button>
+      </div>
+
+      {/* WEIGHT */}
+      <section className="progress-card">
+        <div className="progress-card-header">
+          <div>
+            <span>BODY</span>
+            <h2>Gewichtsverlauf</h2>
+          </div>
+
+          <button
+            className="progress-add-button"
+            onClick={() =>
+              setShowWeightInput(
+                !showWeightInput
+              )
+            }
+          >
+            +
+          </button>
         </div>
-      ) : (
-        <div className="card">
-          {[...data.workouts]
-            .reverse()
-            .map((workout) => (
-              <div
-                className="history-workout"
-                key={workout.id}
-              >
-                <div>
-                  <strong>
-                    {workout.routineName}
-                  </strong>
 
-                  <small>
+        {showWeightInput && (
+          <div className="weight-add-row">
+            <input
+              type="number"
+              step="0.1"
+              placeholder="79.5 kg"
+              value={weight}
+              onChange={(e) =>
+                setWeight(e.target.value)
+              }
+            />
+
+            <button
+              onClick={addWeight}
+            >
+              SAVE
+            </button>
+          </div>
+        )}
+
+        {filteredWeights.length === 0 ? (
+          <div className="progress-empty">
+            <strong>
+              Noch kein Eintrag
+            </strong>
+
+            {lastWeight && (
+              <small>
+                Letzter Eintrag:{" "}
+                {new Date(
+                  lastWeight.date
+                ).toLocaleDateString(
+                  "de-DE"
+                )}{" "}
+                · {lastWeight.weight} kg
+              </small>
+            )}
+          </div>
+        ) : (
+          <div className="weight-history">
+            {filteredWeights
+              .slice(-5)
+              .map((entry) => (
+                <div
+                  className="weight-row"
+                  key={entry.id}
+                >
+                  <span>
                     {new Date(
-                      workout.date
+                      entry.date
                     ).toLocaleDateString(
                       "de-DE"
                     )}
-                  </small>
-                </div>
+                  </span>
 
-                <span>
-                  {
-                    workout.exercises.length
-                  }{" "}
-                  exercises
-                </span>
-              </div>
-            ))}
+                  <strong>
+                    {entry.weight} kg
+                  </strong>
+                </div>
+              ))}
+          </div>
+        )}
+      </section>
+
+      {/* TRAINING CHART */}
+      <section className="progress-card">
+        <div className="progress-card-header">
+          <div>
+            <span>TRAINING</span>
+            <h2>
+              Workouts · 7 Tage
+            </h2>
+          </div>
+
+          <strong className="progress-number">
+            {workoutCounts.reduce(
+              (sum, value) =>
+                sum + value,
+              0
+            )}
+          </strong>
         </div>
-      )}
+
+        <div className="workout-chart">
+          {last7Days.map(
+            (date, index) => {
+              const count =
+                workoutCounts[index];
+
+              const height =
+                count === 0
+                  ? 3
+                  : Math.max(
+                      20,
+                      (count /
+                        maxWorkoutCount) *
+                        100
+                    );
+
+              return (
+                <div
+                  className="workout-chart-day"
+                  key={
+                    date.toISOString()
+                  }
+                >
+                  <div className="chart-bar-area">
+                    <div
+                      className={
+                        count > 0
+                          ? "chart-bar active"
+                          : "chart-bar"
+                      }
+                      style={{
+                        height: `${height}%`,
+                      }}
+                    />
+                  </div>
+
+                  <span>
+                    {date.toLocaleDateString(
+                      "de-DE",
+                      {
+                        weekday:
+                          "short",
+                      }
+                    )}
+                  </span>
+                </div>
+              );
+            }
+          )}
+        </div>
+      </section>
+
+      {/* HISTORY */}
+      <section className="progress-card">
+        <div className="progress-card-header">
+          <div>
+            <span>HISTORY</span>
+            <h2>Workouts</h2>
+          </div>
+
+          <strong className="progress-number">
+            {filteredWorkouts.length}
+          </strong>
+        </div>
+
+        {filteredWorkouts.length ===
+        0 ? (
+          <div className="progress-empty">
+            <strong>
+              No workouts yet.
+            </strong>
+
+            <small>
+              Your completed sessions
+              will appear here.
+            </small>
+          </div>
+        ) : (
+          <div className="progress-history">
+            {[...filteredWorkouts]
+              .reverse()
+              .map((workout) => (
+                <div
+                  className="progress-workout-row"
+                  key={workout.id}
+                >
+                  <div>
+                    <strong>
+                      {
+                        workout.routineName
+                      }
+                    </strong>
+
+                    <small>
+                      {new Date(
+                        workout.date
+                      ).toLocaleDateString(
+                        "de-DE"
+                      )}
+                    </small>
+                  </div>
+
+                  <span>
+                    {
+                      workout.exercises
+                        .length
+                    }{" "}
+                    exercises
+                  </span>
+                </div>
+              ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -2428,10 +2941,23 @@ function Settings({
   data,
   updateData,
 }) {
-  const update = (
-    key,
-    value
-  ) => {
+  const [openSection, setOpenSection] =
+    useState(null);
+
+      const [settingsView, setSettingsView] =
+    useState("main");
+
+    if (settingsView === "body") {
+  return (
+    <BodyData
+      data={data}
+      updateData={updateData}
+      back={() => setSettingsView("main")}
+    />
+  );
+}
+
+  const update = (key, value) => {
     updateData({
       profile: {
         ...data.profile,
@@ -2440,228 +2966,597 @@ function Settings({
     });
   };
 
+  const toggleSection = (section) => {
+    setOpenSection(
+      openSection === section
+        ? null
+        : section
+    );
+  };
+
   return (
-    <div className="page">
-      <PageTitle
-        eyebrow="SETTINGS"
-        title="Your targets."
-        description="Set the targets shown in your dashboard."
-      />
+    <div className="page settings-page">
 
-<div className="card">
-  <p className="eyebrow">
-    WEEKLY SCHEDULE
-  </p>
+      <div className="settings-header">
+        <span>SETTINGS</span>
+        <h1>Your targets.</h1>
+        <p>
+          Customize your goals and training plan.
+        </p>
+      </div>
 
-  <h2>Training days</h2>
+      <p className="settings-section-label">
+        PLAN ANPASSEN
+      </p>
 
-  <p className="muted">
-    Choose which days are training days.
-    All other days become recovery days.
-  </p>
+      <div className="settings-menu">
 
-  <div className="training-day-grid">
-    {[
-      [1, "MON", "Montag"],
-      [2, "TUE", "Dienstag"],
-      [3, "WED", "Mittwoch"],
-      [4, "THU", "Donnerstag"],
-      [5, "FRI", "Freitag"],
-      [6, "SAT", "Samstag"],
-      [7, "SUN", "Sonntag"],
-    ].map(([day, short, full]) => {
-      const active =
-        data.profile.trainingDays?.includes(
-          day
-        );
-
-      return (
-        <button
-          key={day}
-          className={
-            active
-              ? "training-day active"
-              : "training-day"
-          }
-          onClick={() => {
-            const current =
-              data.profile.trainingDays || [];
-
-            const updated = active
-              ? current.filter(
-                  (item) => item !== day
-                )
-              : [...current, day];
-
-            updateData({
-              profile: {
-                ...data.profile,
-                trainingDays: updated,
-              },
-            });
-          }}
-        >
-          <strong>{short}</strong>
-
-          <span>
-            {active
-              ? "🏋️ Training"
-              : "🛌 Rest"}
-          </span>
-
-          <small>{full}</small>
-        </button>
-      );
-    })}
-  </div>
-</div>
-      <div className="card">
-        <div className="day-type-section">
-  <p className="eyebrow">TODAY</p>
-
-  <h3>What kind of day is it?</h3>
-
-  <div className="day-type-buttons">
-    <button
-      className={
-        data.profile.dayType === "training"
-          ? "primary-button"
-          : "secondary-button"
-      }
-      onClick={() =>
-        update("dayType", "training")
-      }
-    >
-      🏋️ TRAINING DAY
-    </button>
-
-    <button
-      className={
-        data.profile.dayType === "rest"
-          ? "primary-button"
-          : "secondary-button"
-      }
-      onClick={() =>
-        update("dayType", "rest")
-      }
-    >
-      🛌 REST DAY
-    </button>
-  </div>
-</div>
-        <label>
-          Name
-
-          <input
-            value={data.profile.name}
-            onChange={(e) =>
-              update(
-                "name",
-                e.target.value
-              )
+        {/* CALORIES */}
+        <div className="settings-item-wrap">
+          <button
+            className="settings-item"
+            onClick={() =>
+              toggleSection("nutrition")
             }
-          />
-        </label>
+          >
+            <span className="settings-icon orange">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="7" />
+                <circle cx="12" cy="12" r="3" />
+                <path d="M12 2v3" />
+                <path d="M22 12h-3" />
+              </svg>
+            </span>
 
-        <div className="form-grid">
-          <label>
-            Calories
+            <div className="settings-item-text">
+              <strong>
+                Kalorien & Makros
+              </strong>
+              <small>
+                Deine Tagesziele anpassen
+              </small>
+            </div>
 
-            <input
-              type="number"
-              value={
-                data.profile.calories
-              }
-              onChange={(e) =>
-                update(
-                  "calories",
-                  Number(
-                    e.target.value
-                  )
-                )
-              }
-            />
-          </label>
+            <span
+              className={`settings-chevron ${
+                openSection === "nutrition"
+                  ? "open"
+                  : ""
+              }`}
+            >
+              ›
+            </span>
+          </button>
 
-          <label>
-            Protein
+          {openSection === "nutrition" && (
+            <div className="settings-panel">
+              <div className="settings-form-grid">
+                <label>
+                  Calories
+                  <input
+                    type="number"
+                    value={data.profile.calories}
+                    onChange={(e) =>
+                      update(
+                        "calories",
+                        Number(e.target.value)
+                      )
+                    }
+                  />
+                </label>
 
-            <input
-              type="number"
-              value={
-                data.profile.protein
-              }
-              onChange={(e) =>
-                update(
-                  "protein",
-                  Number(
-                    e.target.value
-                  )
-                )
-              }
-            />
-          </label>
+                <label>
+                  Protein
+                  <input
+                    type="number"
+                    value={data.profile.protein}
+                    onChange={(e) =>
+                      update(
+                        "protein",
+                        Number(e.target.value)
+                      )
+                    }
+                  />
+                </label>
 
-          <label>
-            Carbs
+                <label>
+                  Carbs
+                  <input
+                    type="number"
+                    value={data.profile.carbs}
+                    onChange={(e) =>
+                      update(
+                        "carbs",
+                        Number(e.target.value)
+                      )
+                    }
+                  />
+                </label>
 
-            <input
-              type="number"
-              value={
-                data.profile.carbs
-              }
-              onChange={(e) =>
-                update(
-                  "carbs",
-                  Number(
-                    e.target.value
-                  )
-                )
-              }
-            />
-          </label>
+                <label>
+                  Fat
+                  <input
+                    type="number"
+                    value={data.profile.fat}
+                    onChange={(e) =>
+                      update(
+                        "fat",
+                        Number(e.target.value)
+                      )
+                    }
+                  />
+                </label>
 
-          <label>
-            Fat
-
-            <input
-              type="number"
-              value={
-                data.profile.fat
-              }
-              onChange={(e) =>
-                update(
-                  "fat",
-                  Number(
-                    e.target.value
-                  )
-                )
-              }
-            />
-          </label>
-          <label>
-  Water (L)
-
-  <input
-    type="number"
-    step="0.1"
-    min="0"
-    max="20"
-    value={data.profile.water}
-    onChange={(e) =>
-      update(
-        "water",
-        Number(e.target.value)
-      )
-    }
-  />
-</label>
+                <label>
+                  Water
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={data.profile.water}
+                    onChange={(e) =>
+                      update(
+                        "water",
+                        Number(e.target.value)
+                      )
+                    }
+                  />
+                </label>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* PROFILE */}
+       <div className="settings-item-wrap">
+  <button
+    type="button"
+    className="settings-item"
+    onClick={() => {
+      setSettingsView("body");
+    }}
+  >
+    <span className="settings-icon teal">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <circle cx="12" cy="7" r="3" />
+        <path d="M5 21v-2a7 7 0 0 1 14 0v2" />
+      </svg>
+    </span>
+
+    <div className="settings-item-text">
+      <strong>Körperdaten</strong>
+      <small>
+        Gewicht, Größe, Alter
+      </small>
+    </div>
+
+    <span className="settings-chevron">
+      ›
+    </span>
+  </button>
+</div>
+
+        {/* TRAINING DAYS */}
+        <div className="settings-item-wrap">
+          <button
+            className="settings-item"
+            onClick={() =>
+              toggleSection("training")
+            }
+          >
+            <span className="settings-icon red">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M6 7v10" />
+                <path d="M18 7v10" />
+                <path d="M3 9v6" />
+                <path d="M21 9v6" />
+                <path d="M6 12h12" />
+              </svg>
+            </span>
+
+            <div className="settings-item-text">
+              <strong>Trainingstage</strong>
+              <small>
+                Wochenplan festlegen
+              </small>
+            </div>
+
+            <span
+              className={`settings-chevron ${
+                openSection === "training"
+                  ? "open"
+                  : ""
+              }`}
+            >
+              ›
+            </span>
+          </button>
+
+          {openSection === "training" && (
+            <div className="settings-panel">
+
+              <div className="settings-training-days">
+                {[
+                  [1, "MON"],
+                  [2, "TUE"],
+                  [3, "WED"],
+                  [4, "THU"],
+                  [5, "FRI"],
+                  [6, "SAT"],
+                  [7, "SUN"],
+                ].map(([day, short]) => {
+                  const active =
+                    data.profile.trainingDays?.includes(
+                      day
+                    );
+
+                  return (
+                    <button
+                      key={day}
+                      className={
+                        active
+                          ? "settings-day active"
+                          : "settings-day"
+                      }
+                      onClick={() => {
+                        const current =
+                          data.profile
+                            .trainingDays || [];
+
+                        const updated = active
+                          ? current.filter(
+                              (item) =>
+                                item !== day
+                            )
+                          : [
+                              ...current,
+                              day,
+                            ];
+
+                        update(
+                          "trainingDays",
+                          updated
+                        );
+                      }}
+                    >
+                      <strong>
+                        {short}
+                      </strong>
+
+                      <small>
+                        {active
+                          ? "TRAIN"
+                          : "REST"}
+                      </small>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* TODAY */}
+        <div className="settings-item-wrap">
+          <button
+            className="settings-item"
+            onClick={() =>
+              toggleSection("today")
+            }
+          >
+            <span className="settings-icon gray">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="8" />
+                <path d="M12 8v4l3 2" />
+              </svg>
+            </span>
+
+            <div className="settings-item-text">
+              <strong>Heute</strong>
+              <small>
+                Training oder Rest Day
+              </small>
+            </div>
+
+            <span
+              className={`settings-chevron ${
+                openSection === "today"
+                  ? "open"
+                  : ""
+              }`}
+            >
+              ›
+            </span>
+          </button>
+
+          {openSection === "today" && (
+            <div className="settings-panel">
+              <div className="settings-day-type">
+                <button
+                  className={
+                    data.profile.dayType ===
+                    "training"
+                      ? "active"
+                      : ""
+                  }
+                  onClick={() =>
+                    update(
+                      "dayType",
+                      "training"
+                    )
+                  }
+                >
+                  TRAINING
+                </button>
+
+                <button
+                  className={
+                    data.profile.dayType ===
+                    "rest"
+                      ? "active"
+                      : ""
+                  }
+                  onClick={() =>
+                    update(
+                      "dayType",
+                      "rest"
+                    )
+                  }
+                >
+                  REST
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* SUMMARY */}
+      <div className="settings-summary">
+        <span>WEEKLY PLAN</span>
+
+        <strong>
+          {
+            data.profile.trainingDays
+              ?.length
+          }{" "}
+          Training Days
+        </strong>
+
+        <small>
+          {7 -
+            (data.profile.trainingDays
+              ?.length || 0)}{" "}
+          Recovery Days
+        </small>
+      </div>
+    </div>
+  );
+}
+function BodyData({
+  data,
+  updateData,
+  back,
+}) {
+  const [editing, setEditing] =
+    useState(false);
+
+  const [form, setForm] = useState({
+    weight: data.profile.weight || "",
+    height: data.profile.height || "",
+    age: data.profile.age || "",
+    bodyFat: data.profile.bodyFat || "",
+  });
+
+  const change = (key, value) => {
+    setForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  };
+
+  const save = () => {
+    updateData({
+      profile: {
+        ...data.profile,
+        weight: Number(form.weight),
+        height: Number(form.height),
+        age: Number(form.age),
+        bodyFat: Number(form.bodyFat),
+      },
+    });
+
+    setEditing(false);
+  };
+
+  return (
+    <div className="body-data-page">
+      <div className="body-data-header">
+        <button
+          className="body-back"
+          onClick={back}
+        >
+          ‹
+        </button>
+
+        <h1>Körperdaten</h1>
+
+        <div />
+      </div>
+
+      <p className="body-description">
+        Hier siehst du deine wichtigsten
+        Körperdaten. Tippe auf Bearbeiten,
+        um Werte zu ändern.
+      </p>
+
+      <div className="body-main-card">
+        <div className="body-card-title">
+          <h2>Grunddaten</h2>
+
+          {editing ? (
+            <button
+              className="body-save-button"
+              onClick={save}
+            >
+              Speichern
+            </button>
+          ) : (
+  <button
+    className="body-edit-button"
+    onClick={() =>
+      setEditing(true)
+    }
+  >
+    Bearbeiten
+  </button>
+)}
+        </div>
+
+        <BodyDataRow
+          title="Aktuelles Gewicht"
+          value={
+            editing
+              ? form.weight
+              : `${
+                  data.profile.weight || "—"
+                } kg`
+          }
+          editing={editing}
+          onChange={(value) =>
+            change("weight", value)
+          }
+          suffix="kg"
+        />
+
+        <BodyDataRow
+          title="Körpergröße"
+          value={
+            editing
+              ? form.height
+              : `${
+                  data.profile.height || "—"
+                } cm`
+          }
+          editing={editing}
+          onChange={(value) =>
+            change("height", value)
+          }
+          suffix="cm"
+        />
+
+        <BodyDataRow
+          title="Alter"
+          value={
+            editing
+              ? form.age
+              : data.profile.age
+              ? `${data.profile.age} Jahre`
+              : "—"
+          }
+          editing={editing}
+          onChange={(value) =>
+            change("age", value)
+          }
+        />
+
+        <BodyDataRow
+          title="Körperfettanteil"
+          value={
+            editing
+              ? form.bodyFat
+              : data.profile.bodyFat
+              ? `${data.profile.bodyFat} %`
+              : "—"
+          }
+          editing={editing}
+          onChange={(value) =>
+            change("bodyFat", value)
+          }
+          suffix="%"
+        />
+      </div>
+
+      <div className="body-info-card">
+        <div className="body-info-icon">
+          i
+        </div>
+
+        <p>
+          Deine Körperdaten werden für
+          deinen Fortschritt und deine
+          persönlichen Ziele gespeichert.
+        </p>
       </div>
     </div>
   );
 }
 
+function BodyDataRow({
+  title,
+  value,
+  editing,
+  onChange,
+  suffix,
+}) {
+  return (
+    <div className="body-data-row">
+      <div className="body-row-icon">
+        ●
+      </div>
+
+      <span className="body-row-title">
+        {title}
+      </span>
+
+      {editing ? (
+        <div className="body-input-wrap">
+          <input
+            type="number"
+            inputMode="decimal"
+            value={value}
+            onChange={(e) =>
+              onChange(e.target.value)
+            }
+          />
+
+          {suffix && (
+            <span>{suffix}</span>
+          )}
+        </div>
+      ) : (
+        <strong>{value}</strong>
+      )}
+    </div>
+  );
+}
 /* =========================
    NAVIGATION
 ========================= */
